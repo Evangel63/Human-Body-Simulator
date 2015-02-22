@@ -138,14 +138,15 @@ static void do_kink_spiral_deform(ParticleKey *state, const float dir[3], const 
 		 * and goes up to the Golden Spiral for 1.0
 		 * http://en.wikipedia.org/wiki/Golden_spiral
 		 */
-		const float b = shape * (1.0f + sqrtf(5.0f)) / M_PI * 0.25f;
+		const float b = shape * (1.0f + sqrtf(5.0f)) / (float)M_PI * 0.25f;
 		/* angle of the spiral against the curve (rotated opposite to make a smooth transition) */
-		const float start_angle = (b != 0.0f ? atanf(1.0f / b) : -M_PI*0.5f) + (b > 0.0f ? -M_PI*0.5f : M_PI*0.5f);
+		const float start_angle = ((b != 0.0f) ? atanf(1.0f / b) :
+		                           (float)-M_PI_2) + (b > 0.0f ? -(float)M_PI_2 : (float)M_PI_2);
 		
 		float spiral_axis[3], rot[3][3];
 		float vec[3];
 		
-		float theta = freq * time * 2.0f*M_PI;
+		float theta = freq * time * 2.0f * (float)M_PI;
 		float radius = amplitude * expf(b * theta);
 		
 		/* a bit more intuitive than using negative frequency for this */
@@ -269,7 +270,7 @@ static void do_kink_spiral(ParticleThreadContext *ctx, ParticleTexture *ptex, co
 			normalize_v3(kink);
 			
 			if (kink_axis_random > 0.0f) {
-				float a = kink_axis_random * (psys_frand(ctx->sim.psys, 7112 + seed) * 2.0f - 1.0f) * M_PI;
+				float a = kink_axis_random * (psys_frand(ctx->sim.psys, 7112 + seed) * 2.0f - 1.0f) * (float)M_PI;
 				float rot[3][3];
 				
 				axis_angle_normalized_to_mat3(rot, dir, a);
@@ -366,16 +367,22 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 				if (ma && draw_col_ma)
 					get_strand_normal(ma, ornor, cur_length, (key-1)->vel);
 			}
-			if (k == totkeys-1) {
-				/* last key */
-				sub_v3_v3v3(key->vel, key->co, (key-1)->co);
-			}
 			
 			if (use_length_check && k > 1) {
 				float dvec[3];
 				/* check if path needs to be cut before actual end of data points */
-				if (!check_path_length(k, keys, key, max_length, step_length, &cur_length, dvec))
+				if (!check_path_length(k, keys, key, max_length, step_length, &cur_length, dvec)) {
+					/* last key */
+					sub_v3_v3v3(key->vel, key->co, (key-1)->co);
+					if (ma && draw_col_ma) {
+						copy_v3_v3(key->col, &ma->r);
+					}
 					break;
+				}
+			}
+			if (k == totkeys-1) {
+				/* last key */
+				sub_v3_v3v3(key->vel, key->co, (key-1)->co);
 			}
 			
 			if (ma && draw_col_ma) {
@@ -703,7 +710,7 @@ void do_child_modifiers(ParticleSimulationData *sim, ParticleTexture *ptex, cons
 		}
 	}
 
-	if (part->roughcurve) {
+	if (roughcurve) {
 		do_rough_curve(orco, mat, t, rough1, part->rough1_size, roughcurve, state);
 	}
 	else {

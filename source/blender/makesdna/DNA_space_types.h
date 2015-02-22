@@ -292,6 +292,7 @@ typedef enum eSpaceOutliner_Mode {
 	SO_DATABLOCKS = 11,
 	SO_USERDEF = 12,
 	/* SO_KEYMAP = 13, */        /* deprecated! */
+	SO_ID_ORPHANS = 14,
 } eSpaceOutliner_Mode;
 
 /* SpaceOops->storeflag */
@@ -462,6 +463,8 @@ typedef enum eScreen_Redraws_Flag {
 	// TIME_CONTINUE_PHYSICS  = (1 << 7), /* UNUSED */
 	TIME_NODES             = (1 << 8),
 	TIME_CLIPS             = (1 << 9),
+
+	TIME_FOLLOW            = (1 << 15),
 } eScreen_Redraws_Flag;
 
 /* time->cache */
@@ -491,7 +494,7 @@ typedef struct SpaceSeq {
 	
 	float xof DNA_DEPRECATED, yof DNA_DEPRECATED;   /* deprecated: offset for drawing the image preview */
 	short mainb;    /* weird name for the sequencer subtype (seq, image, luma... etc) */
-	short render_size;
+	short render_size;  /* eSpaceSeq_Proxy_RenderSize */
 	short chanshown;
 	short zebra;
 	int flag;
@@ -634,9 +637,19 @@ typedef struct SpaceFile {
 	struct FileLayout *layout;
 	
 	short recentnr, bookmarknr;
-	short systemnr, pad2;
+	short systemnr, system_bookmarknr;
 } SpaceFile;
 
+/* FSMenuEntry's without paths indicate seperators */
+typedef struct FSMenuEntry {
+	struct FSMenuEntry *next;
+
+	char *path;
+	char name[256];  /* FILE_MAXFILE */
+	short save;
+	short valid;
+	short pad[2];
+} FSMenuEntry;
 
 /* FileSelectParams.display */
 enum FileDisplayTypeE {

@@ -79,6 +79,8 @@
 #include "BKE_tracking.h"
 #include "BKE_movieclip.h"
 
+#include "BIK_api.h"
+
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
 #endif
@@ -2715,7 +2717,7 @@ static void stretchto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
 				
 				float range = bulge_max - 1.0f;
 				float scale = (range > 0.0f) ? 1.0f / range : 0.0f;
-				float soft = 1.0f + range * atanf((bulge - 1.0f) * scale) / (0.5f * M_PI);
+				float soft = 1.0f + range * atanf((bulge - 1.0f) * scale) / (float)M_PI_2;
 				
 				bulge = interpf(soft, hard, data->bulge_smooth);
 			}
@@ -2727,7 +2729,7 @@ static void stretchto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
 				
 				float range = 1.0f - bulge_min;
 				float scale = (range > 0.0f) ? 1.0f / range : 0.0f;
-				float soft = 1.0f - range * atanf((1.0f - bulge) * scale) / (0.5f * M_PI);
+				float soft = 1.0f - range * atanf((1.0f - bulge) * scale) / (float)M_PI_2;
 				
 				bulge = interpf(soft, hard, data->bulge_smooth);
 			}
@@ -4410,8 +4412,24 @@ bool BKE_constraint_remove(ListBase *list, bConstraint *con)
 		BLI_freelinkN(list, con);
 		return true;
 	}
-	else
+	else {
 		return false;
+	}
+}
+
+bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool clear_dep)
+{
+	const short type = con->type;
+	if (BKE_constraint_remove(list, con)) {
+		/* ITASC needs to be rebuilt once a constraint is removed [#26920] */
+		if (clear_dep && ELEM(type, CONSTRAINT_TYPE_KINEMATIC, CONSTRAINT_TYPE_SPLINEIK)) {
+			BIK_clear_data(ob->pose);
+		}
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 /* ......... */

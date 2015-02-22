@@ -375,8 +375,12 @@ int BKE_text_reload(Text *text)
 
 	fclose(fp);
 
-	BLI_stat(str, &st);
-	text->mtime = st.st_mtime;
+	if (BLI_stat(str, &st) != -1) {
+		text->mtime = st.st_mtime;
+	}
+	else {
+		text->mtime = 0;
+	}
 
 	text_from_buf(text, buffer, len);
 
@@ -431,8 +435,12 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
 
 	fclose(fp);
 
-	BLI_stat(str, &st);
-	ta->mtime = st.st_mtime;
+	if (BLI_stat(str, &st) != -1) {
+		ta->mtime = st.st_mtime;
+	}
+	else {
+		ta->mtime = 0;
+	}
 	
 	text_from_buf(ta, buffer, len);
 	
@@ -606,7 +614,7 @@ void BKE_text_unlink(Main *bmain, Text *text)
 		}
 	}
 
-	for (te = bmain->tex.first; mat; mat = mat->id.next) {
+	for (te = bmain->tex.first; te; te = te->id.next) {
 		ntree = te->nodetree;
 		if (!ntree)
 			continue;
@@ -685,7 +693,7 @@ void BKE_text_clear(Text *text) /* called directly from rna */
 {
 	int oldstate;
 
-	oldstate = txt_get_undostate(  );
+	oldstate = txt_get_undostate();
 	txt_set_undostate(1);
 	txt_sel_all(text);
 	txt_delete_sel(text);

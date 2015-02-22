@@ -50,6 +50,7 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_material.h"
+#include "BKE_group.h"
 
 #include "ED_object.h"
 #include "ED_screen.h"
@@ -97,7 +98,9 @@ static void outliner_open_reveal(SpaceOops *soops, ListBase *lb, TreeElement *te
 }
 #endif
 
-static TreeElement *outliner_dropzone_element(const SpaceOops *soops, TreeElement *te, const float fmval[2], const int children)
+static TreeElement *outliner_dropzone_element(
+        const SpaceOops *soops, TreeElement *te,
+        const float fmval[2], const bool children)
 {
 	if ((fmval[1] > te->ys) && (fmval[1] < (te->ys + UI_UNIT_Y))) {
 		/* name and first icon */
@@ -116,7 +119,7 @@ static TreeElement *outliner_dropzone_element(const SpaceOops *soops, TreeElemen
 }
 
 /* Used for drag and drop parenting */
-TreeElement *outliner_dropzone_find(const SpaceOops *soops, const float fmval[2], const int children)
+TreeElement *outliner_dropzone_find(const SpaceOops *soops, const float fmval[2], const bool children)
 {
 	TreeElement *te;
 
@@ -1455,6 +1458,62 @@ void OUTLINER_OT_keyingset_remove_selected(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+
+/* ************************************************************** */
+/* ORPHANED DATABLOCKS */
+
+static int ed_operator_outliner_id_orphans_active(bContext *C)
+{
+	ScrArea *sa = CTX_wm_area(C);
+	if ((sa) && (sa->spacetype == SPACE_OUTLINER)) {
+		SpaceOops *so = CTX_wm_space_outliner(C);
+		return (so->outlinevis == SO_ID_ORPHANS);
+	}
+	return 0;
+}
+
+/* Purge Orphans Operator --------------------------------------- */
+
+static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
+{
+	/* present a prompt to informing users that this change is irreversible */
+	return WM_operator_confirm_message(C, op,
+	                                   "Purging unused datablocks cannot be undone. "
+	                                   "Click here to proceed...");
+}
+
+static int outliner_orphans_purge_exec(bContext *C, wmOperator *UNUSED(op))
+{
+	/* Firstly, ensure that the file has been saved,
+	 * so that the latest changes since the last save
+	 * are retained...
+	 */
+	WM_operator_name_call(C, "WM_OT_save_mainfile", WM_OP_EXEC_DEFAULT, NULL);
+	
+	/* Now, reload the file to get rid of the orphans... */
+	WM_operator_name_call(C, "WM_OT_revert_mainfile", WM_OP_EXEC_DEFAULT, NULL);
+	return OPERATOR_FINISHED;
+}
+
+void OUTLINER_OT_orphans_purge(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->idname = "OUTLINER_OT_orphans_purge";
+	ot->name = "Purge All";
+	ot->description = "Clear all orphaned datablocks without any users from the file (cannot be undone)";
+	
+	/* callbacks */
+	ot->invoke = outliner_orphans_purge_invoke;
+	ot->exec = outliner_orphans_purge_exec;
+	ot->poll = ed_operator_outliner_id_orphans_active;
+	
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/* ************************************************************** */
+/* DRAG AND DROP OPERATORS */
+
 /* ******************** Parent Drop Operator *********************** */
 
 static int parent_drop_exec(bContext *C, wmOperator *op)
@@ -1502,7 +1561,7 @@ static int parent_drop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
 
 	/* Find object hovered over */
-	te = outliner_dropzone_find(soops, fmval, 1);
+	te = outliner_dropzone_find(soops, fmval, true);
 
 	if (te) {
 		RNA_string_set(op->ptr, "parent", te->name);
@@ -1717,7 +1776,7 @@ static int scene_drop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
 
 	/* Find object hovered over */
-	te = outliner_dropzone_find(soops, fmval, 0);
+	te = outliner_dropzone_find(soops, fmval, false);
 
 	if (te) {
 		Base *base;
@@ -1787,7 +1846,7 @@ static int material_drop_invoke(bContext *C, wmOperator *op, const wmEvent *even
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
 
 	/* Find object hovered over */
-	te = outliner_dropzone_find(soops, fmval, 1);
+	te = outliner_dropzone_find(soops, fmval, true);
 
 	if (te) {
 		RNA_string_set(op->ptr, "object", te->name);
@@ -1831,3 +1890,65 @@ void OUTLINER_OT_material_drop(wmOperatorType *ot)
 	RNA_def_string(ot->srna, "material", "Material", MAX_ID_NAME, "Material", "Target Material");
 }
 
+static int group_link_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+	Main *bmain = CTX_data_main(C);
+	Group *group = NULL;
+	Object *ob = NULL;
+	Scene *scene = CTX_data_scene(C);
+	SpaceOops *soops = CTX_wm_space_outliner(C);
+	ARegion *ar = CTX_wm_region(C);
+	TreeElement *te = NULL;
+	char ob_name[MAX_ID_NAME - 2];
+	float fmval[2];
+
+	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
+
+	/* Find object hovered over */
+	te = outliner_dropzone_find(soops, fmval, true);
+
+	if (te) {
+		group = (Group *)BKE_libblock_find_name(ID_GR, te->name);
+
+		RNA_string_get(op->ptr, "object", ob_name);
+		ob = (Object *)BKE_libblock_find_name(ID_OB, ob_name);
+
+		if (ELEM(NULL, group, ob)) {
+			return OPERATOR_CANCELLED;
+		}
+		if (BKE_group_object_exists(group, ob)) {
+			return OPERATOR_FINISHED;
+		}
+
+		if (BKE_group_object_cyclic_check(bmain, ob, group)) {
+			BKE_report(op->reports, RPT_ERROR, "Could not add the group because of dependency cycle detected");
+			return OPERATOR_CANCELLED;
+		}
+
+		BKE_group_object_add(group, ob, scene, NULL);
+		WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+
+		return OPERATOR_FINISHED;
+	}
+
+	return OPERATOR_CANCELLED;
+}
+
+void OUTLINER_OT_group_link(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Link Object to Group";
+	ot->description = "Link Object to Group in Outliner";
+	ot->idname = "OUTLINER_OT_group_link";
+
+	/* api callbacks */
+	ot->invoke = group_link_invoke;
+
+	ot->poll = ED_operator_outliner_active;
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+
+	/* properties */
+	RNA_def_string(ot->srna, "object", "Object", MAX_ID_NAME, "Object", "Target Object");
+}

@@ -272,11 +272,11 @@ void psys_enable_all(Object *ob)
 	for (; psys; psys = psys->next)
 		psys->flag &= ~PSYS_DISABLED;
 }
-int psys_in_edit_mode(Scene *scene, ParticleSystem *psys)
+bool psys_in_edit_mode(Scene *scene, ParticleSystem *psys)
 {
 	return (scene->basact && (scene->basact->object->mode & OB_MODE_PARTICLE_EDIT) && psys == psys_get_current((scene->basact)->object) && (psys->edit || psys->pointcache->edit) && !psys->renderdata);
 }
-int psys_check_enabled(Object *ob, ParticleSystem *psys)
+bool psys_check_enabled(Object *ob, ParticleSystem *psys)
 {
 	ParticleSystemModifierData *psmd;
 
@@ -294,7 +294,7 @@ int psys_check_enabled(Object *ob, ParticleSystem *psys)
 	return 1;
 }
 
-int psys_check_edited(ParticleSystem *psys)
+bool psys_check_edited(ParticleSystem *psys)
 {
 	if (psys->part && psys->part->type == PART_HAIR)
 		return (psys->flag & PSYS_EDITED || (psys->edit && psys->edit->edited));
@@ -414,8 +414,7 @@ void free_hair(Object *UNUSED(ob), ParticleSystem *psys, int dynamics)
 	if (psys->clmd) {
 		if (dynamics) {
 			BKE_ptcache_free_list(&psys->ptcaches);
-			psys->clmd->point_cache = psys->pointcache = NULL;
-			BLI_listbase_clear(&psys->clmd->ptcaches);
+			psys->pointcache = NULL;
 
 			modifier_free((ModifierData *)psys->clmd);
 			
@@ -4059,8 +4058,8 @@ void psys_get_dupli_path_transform(ParticleSimulationData *sim, ParticleData *pa
 		normalize_v3(nor);
 
 		/* make sure that we get a proper side vector */
-		if (fabsf(dot_v3v3(nor, vec)) > 0.999999) {
-			if (fabsf(dot_v3v3(nor, xvec)) > 0.999999) {
+		if (fabsf(dot_v3v3(nor, vec)) > 0.999999f) {
+			if (fabsf(dot_v3v3(nor, xvec)) > 0.999999f) {
 				nor[0] = 0.0f;
 				nor[1] = 1.0f;
 				nor[2] = 0.0f;

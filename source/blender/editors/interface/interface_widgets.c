@@ -1908,6 +1908,23 @@ static void widget_state_blend(char cp[3], const char cpstate[3], const float fa
 	}
 }
 
+/* put all widget colors on half alpha, use local storage */
+static void ui_widget_color_disabled(uiWidgetType *wt)
+{
+	static uiWidgetColors wcol_theme_s;
+
+	wcol_theme_s = *wt->wcol_theme;
+
+	wcol_theme_s.outline[3] *= 0.5;
+	wcol_theme_s.inner[3] *= 0.5;
+	wcol_theme_s.inner_sel[3] *= 0.5;
+	wcol_theme_s.item[3] *= 0.5;
+	wcol_theme_s.text[3] *= 0.5;
+	wcol_theme_s.text_sel[3] *= 0.5;
+
+	wt->wcol_theme = &wcol_theme_s;
+}
+
 /* copy colors from theme, and set changes in it based on state */
 static void widget_state(uiWidgetType *wt, int state)
 {
@@ -1917,6 +1934,10 @@ static void widget_state(uiWidgetType *wt, int state)
 		/* Override default widget's colors. */
 		bTheme *btheme = UI_GetTheme();
 		wt->wcol_theme = &btheme->tui.wcol_list_item;
+
+		if (state & (UI_BUT_DISABLED | UI_BUT_INACTIVE)) {
+			ui_widget_color_disabled(wt);
+		}
 	}
 
 	wt->wcol = *(wt->wcol_theme);
@@ -2210,7 +2231,7 @@ void ui_hsvcircle_pos_from_vals(uiBut *but, const rcti *rect, float *hsv, float 
 	float radius = (float)min_ii(BLI_rcti_size_x(rect), BLI_rcti_size_y(rect)) / 2.0f;
 	float ang, radius_t;
 	
-	ang = 2.0f * (float)M_PI * hsv[0] + 0.5f * (float)M_PI;
+	ang = 2.0f * (float)M_PI * hsv[0] + (float)M_PI_2;
 	
 	if ((but->flag & UI_BUT_COLOR_CUBIC) && (U.color_picker_type == USER_CP_CIRCLE_HSV))
 		radius_t = (1.0f - pow3f(1.0f - hsv[1]));
@@ -3007,11 +3028,8 @@ static void widget_swatch(uiBut *but, uiWidgetColors *wcol, rcti *rect, int stat
 		float height = rect->ymax - rect->ymin;
 		/* find color luminance and change it slightly */
 		float bw = rgb_to_bw(col);
-		
-		if (bw > 0.5)
-			bw -= 0.5;
-		else
-			bw += 0.5;
+
+		bw += (bw < 0.5f) ? 0.5f : -0.5f;
 		
 		glColor4f(bw, bw, bw, 1.0);
 		glBegin(GL_TRIANGLES);
@@ -3566,23 +3584,6 @@ static int widget_roundbox_set(uiBut *but, rcti *rect)
 	return roundbox;
 }
 
-/* put all widget colors on half alpha, use local storage */
-static void ui_widget_color_disabled(uiWidgetType *wt)
-{
-	static uiWidgetColors wcol_theme_s;
-	
-	wcol_theme_s = *wt->wcol_theme;
-	
-	wcol_theme_s.outline[3] *= 0.5;
-	wcol_theme_s.inner[3] *= 0.5;
-	wcol_theme_s.inner_sel[3] *= 0.5;
-	wcol_theme_s.item[3] *= 0.5;
-	wcol_theme_s.text[3] *= 0.5;
-	wcol_theme_s.text_sel[3] *= 0.5;
-
-	wt->wcol_theme = &wcol_theme_s;
-}
-
 /* conversion from old to new buttons, so still messy */
 void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rcti *rect)
 {
@@ -3822,13 +3823,13 @@ void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rct
 		
 		if (disabled)
 			ui_widget_color_disabled(wt);
-		
+
 		wt->state(wt, state);
 		if (wt->custom)
 			wt->custom(but, &wt->wcol, rect, state, roundboxalign);
 		else if (wt->draw)
 			wt->draw(&wt->wcol, rect, state, roundboxalign);
-		
+
 		if (disabled)
 			glEnable(GL_BLEND);
 		wt->text(fstyle, &wt->wcol, but, rect);
@@ -3947,7 +3948,7 @@ void ui_draw_pie_center(uiBlock *block)
 	int subd = 40;
 
 	float angle = atan2f(pie_dir[1], pie_dir[0]);
-	float range = (block->pie_data.flags & UI_PIE_DEGREES_RANGE_LARGE) ? ((float)M_PI / 2.0f) : ((float)M_PI / 4.0f);
+	float range = (block->pie_data.flags & UI_PIE_DEGREES_RANGE_LARGE) ? M_PI_2 : M_PI_4;
 
 	glPushMatrix();
 	glTranslatef(cx, cy, 0.0f);

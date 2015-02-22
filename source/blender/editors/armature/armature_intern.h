@@ -222,7 +222,7 @@ void POSE_OT_propagate(struct wmOperatorType *ot);
  */
 
 EditArmatureElement *make_elementList(struct ListBase *edList, struct ListBase *elements, struct EditArmatureElement *parent, struct ArmatureElement *actElement);
-void BIF_sk_selectStroke(struct bContext *C, const int mval[2], short extend);
+bool BIF_sk_selectStroke(struct bContext *C, const int mval[2], const bool extend);
 
 /* duplicate method */
 void preEditArmatureElementDuplicate(struct ListBase *editbones);
